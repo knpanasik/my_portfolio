@@ -4,4 +4,4 @@
 но таблицы также содержат информацию о более поздних оценках, которые эти посты получили.
 
 # ER-диаграмма базы данных:
-
+![](https://github.com/knpanasik/my_portfolio/blob/additional/sql_advance_tasks/ER_StackOverflow.png)

@@ -7,8 +7,8 @@
 ![](https://github.com/knpanasik/my_portfolio/blob/additional/sql_advance_tasks/ER_StackOverflow.png)
 
 Stackoverflow.badges хранит информацию о значках, которые присуждаются за разные достижения. <br/>
-Stackoverflow.post_types содержит информацию о типе постов.
-Stackoverflow.posts - информацию о постах.
-Stackoverflow.users - о пользователях.
-Stackoverflow.vote_types - о типах голосов.
+Stackoverflow.post_types содержит информацию о типе постов. <br/>
+Stackoverflow.posts - информацию о постах. <br/>
+Stackoverflow.users - о пользователях. <br/>
+Stackoverflow.vote_types - о типах голосов. <br/>
 Stackoverflow.votes - о голосах за посты. 

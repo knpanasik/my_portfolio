@@ -56,33 +56,39 @@ ORDER BY id
 ___
 
 6. Отобрать 10 пользователей, которые поставили больше всего голосов типа `Close`. Отобразить таблицу из двух полей:
-   идентификатором пользователя и количеством голосов. 
+   идентификатором пользователя и количеством голосов. Отсортируйте данные сначала по убыванию количества голосов,
+   потом по убыванию значения идентификатора пользователя.
 
 ```SQL
-select v.user_id as userss,
-       count(vote_type_id) as votess
-from stackoverflow.votes v
-join stackoverflow.users u on v.user_id = u.id
-where v.vote_type_id = 6
-group by v.user_id
-order by votess desc, userss desc
-limit 10;
+SELECT *
+FROM (
+      SELECT v.user_id,
+             COUNT(vt.id) AS cnt
+      FROM stackoverflow.votes AS v
+      JOIN stackoverflow.vote_types as vt ON vt.id = v.vote_type_id
+      WHERE vt.name = 'Close'
+      GROUP BY v.user_id
+      ORDER BY cnt DESC 
+      LIMIT 10
+    ) AS temp
+ORDER BY temp.cnt DESC, temp.user_id DESC
 ```
 ___
 
 7. Отобрать 10 пользователей по количеству значков, полученных в период с 15 ноября по 15 декабря 2008 года включительно.
 Отобразить: идентификатор пользователя; число значков; место в рейтинге — чем больше значков, тем выше рейтинг.
 Пользователям, которые набрали одинаковое количество значков, присвойте одно и то же место в рейтинге.
+Отсортируйте записи по количеству значков по убыванию, а затем по возрастанию значения идентификатора пользователя.
 
 ```SQL
-select user_id,
+SELECT user_id,
        count(id) badg,
        DENSE_RANK() OVER(ORDER BY count(id) DESC)
-from stackoverflow.badges
-where creation_date::date between '2008-11-15' and '2008-12-15'
-group by user_id
-order by badg desc, user_id
-limit 10;
+FROM stackoverflow.badges
+WHERE creation_date::date BETWEEN '2008-11-15' AND '2008-12-15'
+GROUP BY user_id
+ORDER BY badg DESC, user_id
+LIMIT 10
 ```
 ___
 
@@ -92,16 +98,16 @@ ___
 Не учитывать посты без заголовка, а также те, что набрали ноль очков.
 
 ```SQL
-select title,
+SELECT title,
        user_id,
        score,
-       round(avg(score) over(partition by user_id))
-from stackoverflow.posts
-where title IS NOT NULL and score !=0;
+       ROUND(AVG(score) OVER(PARTITION BY user_id))
+FROM stackoverflow.posts
+WHERE title IS NOT NULL AND score <>0
 ```
 ___
 
-9. Отобразить заголовки постов, которые были написаны пользователями, получившими более 1000 значков.
+9. Отобразить заголовки постов, которые были написаны пользователями, получившими более 1000 значков.  Посты без заголовков не должны попасть в список.
 
 ```SQL
 select p.title

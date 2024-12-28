@@ -1,6 +1,6 @@
  1. Найдите количество вопросов, которые набрали больше 300 очков или как минимум 100 раз были добавлены в «Закладки».
 
-```SQL
+```
 SELECT COUNT(DISTINCT p.id)
 FROM stackoverflow.posts AS p
 JOIN stackoverflow.post_types AS pt ON p.post_type_id = pt.id

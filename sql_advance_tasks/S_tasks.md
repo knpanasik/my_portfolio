@@ -4,8 +4,7 @@
 SELECT COUNT(DISTINCT p.id)
 FROM stackoverflow.posts AS p
 JOIN stackoverflow.post_types AS pt ON p.post_type_id = pt.id
-WHERE pt.type = 'Question' 
-   AND (p.score>300 OR p.favorites_count >= 100)
+WHERE pt.type = 'Question' AND (p.score > 300 OR p.favorites_count >= 100)
 ```
 ___
 
@@ -56,7 +55,7 @@ ORDER BY id
 ___
 
 6. Отобрать 10 пользователей, которые поставили больше всего голосов типа `Close`. Отобразить таблицу из двух полей:
-   идентификатором пользователя и количеством голосов. Отсортируйте данные сначала по убыванию количества голосов,
+   идентификатором пользователя и количеством голосов. Отсортировать данные сначала по убыванию количества голосов,
    потом по убыванию значения идентификатора пользователя.
 
 ```SQL
@@ -78,7 +77,7 @@ ___
 7. Отобрать 10 пользователей по количеству значков, полученных в период с 15 ноября по 15 декабря 2008 года включительно.
 Отобразить: идентификатор пользователя; число значков; место в рейтинге — чем больше значков, тем выше рейтинг.
 Пользователям, которые набрали одинаковое количество значков, присвойте одно и то же место в рейтинге. <br/>
-Отсортируйте записи по количеству значков по убыванию, а затем по возрастанию значения идентификатора пользователя.
+Отсортировать записи по количеству значков по убыванию, а затем по возрастанию значения идентификатора пользователя.
 
 ```SQL
 SELECT user_id,
@@ -103,21 +102,22 @@ SELECT title,
        score,
        ROUND(AVG(score) OVER(PARTITION BY user_id))
 FROM stackoverflow.posts
-WHERE title IS NOT NULL AND score <>0
+WHERE title IS NOT NULL AND score <> 0
 ```
 ___
 
-9. Отобразить заголовки постов, которые были написаны пользователями, получившими более 1000 значков.
+9. Отобразить заголовки постов, которые были написаны пользователями, получившими более 1000 значков. <br/>
 Посты без заголовков не должны попасть в список.
 
 ```SQL
-select p.title
-from stackoverflow.posts p
-join stackoverflow.users u on p.user_id = u.id
-join stackoverflow.badges b on u.id = b.user_id
-where p.title is not null
-group by p.title
-having count(b.id) > 1000;
+SELECT title
+FROM stackoverflow.posts
+WHERE title IS NOT NULL AND user_id IN (
+                  SELECT user_id
+                  FROM stackoverflow.badges AS b
+                  GROUP BY user_id
+                  HAVING COUNT(b.id) > 1000
+                  )
 ```
 ___
 
@@ -125,19 +125,21 @@ ___
     Разделите пользователей на три группы в зависимости от количества просмотров их профилей:
 - пользователям с числом просмотров больше либо равным 350 присвойте группу 1;
 - пользователям с числом просмотров меньше 350, но больше либо равно 100 — группу 2;
-- пользователям с числом просмотров меньше 100 — группу 3.
-Отобразить в итоговой таблице идентификатор пользователя, количество просмотров профиля и группу. 
+- пользователям с числом просмотров меньше 100 — группу 3.    
+Отобразить в итоговой таблице идентификатор пользователя, количество просмотров профиля и группу.    
+Пользователи с количеством просмотров меньше либо равным нулю не должны войти в итоговую таблицу.
 
 ```SQL
 SELECT id,
-      views,
-      CASE
-          WHEN views >= 350 THEN 1
-          WHEN views < 350 AND views >= 100 THEN 2
-          ELSE 3                    
-      END as category
+       views,
+       CASE
+          WHEN views>=350 THEN 1
+          WHEN views<100 THEN 3
+          ELSE 2
+       END AS group
 FROM stackoverflow.users
-WHERE location LIKE '%Canada%' AND views !=0;
+WHERE location LIKE '%Canada%'
+   AND views > 0
 ```
 ___
 
@@ -145,26 +147,30 @@ ___
     Вывести поля с идентификатором пользователя, группой и количеством просмотров.
 
 ```SQL
-with user_cat as (select id,
-                        views,
-                        case
-                            when views >= 350 then 1
-                            when views < 350 AND views >= 100 then 2
-                            else 3  
-                        end as category
-                  from stackoverflow.users
-                  where location LIKE '%Canada%' and views !=0),
-     max_v as (select id,
-                      views,
-                      category,
-                      max(views) over(partition by category) as max_views
-               from  user_cat) 
-select id,
-        category,
-        views
-from max_v
-where views = max_views 
-order by views DESC, id;
+WITH tab AS
+(SELECT temp.id,
+        temp.views,
+        temp.group,
+        MAX(temp.views) OVER (PARTITION BY temp.group) AS max	
+ FROM (SELECT id,
+              views,
+              CASE
+                 WHEN views >= 350 THEN 1
+                 WHEN views < 100 THEN 3
+                 ELSE 2
+              END AS group
+       FROM stackoverflow.users
+       WHERE location LIKE '%Canada%'
+          AND views > 0
+          ) as temp
+  )
+  
+SELECT tab.id, 
+       tab.views,  
+       tab.group
+FROM tab
+WHERE tab.views = tab.max
+ORDER BY tab.views DESC, tab.id
 ```
 ___
 
@@ -172,15 +178,15 @@ ___
 номер дня; число пользователей, зарегистрированных в этот день; сумму пользователей с накоплением.
 
 ```SQL
-with user_per_day as (select extract(DAY from creation_date::date) as day_year,
-                             count(id) as user_cnt
-                      from stackoverflow.users
-                      where creation_date::date between '2008-11-01' and '2008-11-30'
-                      group by extract(DAY from creation_date::date))
-select day_year,
-        user_cnt,
-        sum(user_cnt) over(order by day_year)
-from user_per_day;
+SELECT *,
+       SUM(temp.cnt_id) OVER (ORDER BY temp.days) as cum_num
+FROM (
+      SELECT EXTRACT(DAY FROM creation_date::date) AS days,
+             COUNT(id) AS cnt_id
+      FROM stackoverflow.users
+      WHERE creation_date::date BETWEEN '2008-11-01' AND '2008-11-30'
+      GROUP BY EXTRACT(DAY FROM creation_date::date)
+      ) as temp
 ```
 ___
 
@@ -188,40 +194,54 @@ ___
     Отобразить: идентификатор пользователя; разницу во времени между регистрацией и первым постом.
 
 ```SQL
-select user_id,
-       created_post - creation_date as interval_date
-from stackoverflow.users u
-join (select user_id,
-              creation_date as created_post,
-              row_number() over(partition by user_id order by creation_date) as post_rang
-      from stackoverflow.posts) as abc on u.id = abc.user_id
-where post_rang = 1;
+WITH reg AS (
+            SELECT id AS uid,
+                creation_date AS reg_date
+            FROM stackoverflow.users
+            GROUP  BY id, creation_date
+            ),
+     p_user AS (
+                 SELECT user_id AS user_p,
+                     creation_date AS post_date,
+                     ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY creation_date) AS d_num    
+                 FROM stackoverflow.posts  
+                 )
+                 
+SELECT uid,
+       (post_date - reg_date) AS diff
+FROM p_user LEFT JOIN reg ON p_user.user_p = reg.uid
+WHERE d_num = 1
 ```
 ___
 
-14. Вывести общую сумму просмотров у постов, опубликованных в каждый месяц 2008 года.
+14. Вывести общую сумму просмотров у постов, опубликованных в каждый месяц 2008 года. <br/>
+Результат отсортировать по убыванию общего количества просмотров.
     
 ```SQL
-select cast(date_trunc('month',creation_date) as date), sum(views_count)
-from stackoverflow.posts
-where extract(year from cast(creation_date as date)) = 2008
-group by cast(date_trunc('month',creation_date) as date)
-order by sum(views_count) desc;
+SELECT SUM(views_count) AS num_views,
+       CAST(DATE_TRUNC('month', creation_date) AS date) AS mnth
+FROM stackoverflow.posts
+WHERE EXTRACT(YEAR FROM CAST(creation_date as date)) = 2008
+GROUP BY CAST(DATE_TRUNC('month', creation_date) AS date)
+ORDER BY SUM(views_count) DESC
 ```
 ___
 
-15. Вывести имена самых активных пользователей, которые в первый месяц после регистрации (включая день регистрации) дали больше 100 ответов.
+15. Вывести имена самых активных пользователей, которые в первый месяц после регистрации (включая день регистрации) дали больше 100 ответов. <br/>
+    Вопросы, которые задавали пользователи, не учитываются. <br/>
     Для каждого имени пользователя вывести количество уникальных значений user_id.
     
 ```SQL
-select u.display_name as user_name,
-       count(distinct p.user_id) as user_cnt
-from stackoverflow.users u
-join stackoverflow.posts p on u.id = p.user_id
-where p.post_type_id = 2 and p.creation_date::date <= u.creation_date::date + interval '1 month'
-group by user_name
-having count(p.id) > 100
-order by user_name;
+SELECT u.display_name,
+       COUNT(DISTINCT p.user_id)
+FROM stackoverflow.posts AS p
+JOIN stackoverflow.users AS u ON p.user_id = u.id
+JOIN stackoverflow.post_types AS pt ON pt.id = p.post_type_id
+WHERE p.creation_date::date BETWEEN u.creation_date::date AND (u.creation_date::date + INTERVAL '1 month')
+AND pt.type LIKE '%Answer%'
+GROUP BY u.display_name
+HAVING COUNT(DISTINCT p.id) > 100
+ORDER BY u.display_name
 ```
 ___
 
@@ -229,16 +249,23 @@ ___
     и сделали хотя бы один пост в декабре того же года. Отсортировать таблицу по значению месяца по убыванию.
     
 ```SQL
-select date_trunc('month', p.creation_date)::date,
-       count(p.id)
-from stackoverflow.posts p
-where p.user_id in (select u.id
-                    from stackoverflow.posts p
-                    join stackoverflow.users u on p.user_id = u.id
-                    where (u.creation_date::date between '2008-09-01' and '2008-09-30') 
-                            and (p.creation_date::date between '2008-12-01' and '2008-12-31'))
-group by date_trunc('month', p.creation_date)::date
-order by date_trunc('month', p.creation_date)::date desc;
+WITH tab AS (
+           SELECT u.id AS uid
+           FROM stackoverflow.posts AS p
+           JOIN stackoverflow.users AS u ON p.user_id = u.id
+           WHERE CAST(DATE_TRUNC('month', u.creation_date) AS date) = '2008-09-01'
+                 AND CAST(DATE_TRUNC('month', p.creation_date) AS date) = '2008-12-01'
+           GROUP BY u.id
+           HAVING COUNT(p.id) > 0
+          )
+
+SELECT COUNT(p.id),
+       CAST(DATE_TRUNC('month', p.creation_date) AS date)      
+FROM stackoverflow.posts AS p
+WHERE p.user_id IN (SELECT uid FROM tab)
+      AND EXTRACT(YEAR FROM p.creation_date) = '2008'
+GROUP BY CAST(DATE_TRUNC('month', p.creation_date) AS date)
+ORDER BY CAST(DATE_TRUNC('month', p.creation_date) AS date) DESC
 ```
 ___
 
@@ -247,26 +274,33 @@ ___
 Данные в таблице должны быть отсортированы по возрастанию идентификаторов пользователей, а данные об одном и том же пользователе — по возрастанию даты создания поста.
     
 ```SQL
-select user_id,
+SELECT user_id,
        creation_date,
        views_count,
-       sum(views_count) over(partition by user_id order by creation_date)
-from stackoverflow.posts
-order by user_id, creation_date;
+       SUM(views_count) OVER (PARTITION BY user_id ORDER BY creation_date)						
+FROM stackoverflow.posts
+ORDER BY user_id, creation_date
 ```
 ___
 
 18. Сколько в среднем дней в период с 1 по 7 декабря 2008 года включительно пользователи взаимодействовали с платформой?
-    Для каждого пользователя отобрать дни, в которые он или она опубликовали хотя бы один пост.
+    Для каждого пользователя отобрать дни, в которые он или она опубликовали хотя бы один пост. Результат округлить до целого.
     
 ```SQL
-with this as (select u.id, count(distinct p.creation_date::date) as activedays
-              from stackoverflow.users u 
-              join stackoverflow.posts p on u.id = p.user_id
-              where p.creation_date::date between '2008-12-01' and '2008-12-07'
-              group by u.id)
-select round(avg(activedays))
-from this;
+WITH profiles AS (
+                SELECT DISTINCT user_id,
+                       DATE_TRUNC('day', creation_date)::date AS p_days
+                FROM stackoverflow.posts
+                WHERE DATE_TRUNC('day', creation_date)::date BETWEEN '2008-12-01' AND '2008-12-07'
+                ),
+     sorted_profiles AS (
+                         SELECT user_id,
+                                COUNT(p_days) AS d_cnt
+                         FROM profiles
+                         GROUP BY user_id
+                        )
+SELECT ROUND(AVG(d_cnt)) AS avg_posts_per_day
+FROM sorted_profiles
 ```
 ___
 
@@ -275,16 +309,17 @@ ___
 Округлить значение процента до двух знаков после запятой.
     
 ```SQL
-with this as (
-    select extract(month from creation_date::date) AS month_date,
-           COUNT(DISTINCT id) AS post_month
-    from stackoverflow.posts
-    where creation_date::date between '2008-09-01' and '2008-12-31'
-    group by month_date
+WITH temp_table AS (
+                    SELECT EXTRACT(MONTH from creation_date::date) AS month,
+                           COUNT(DISTINCT id) AS cnt   
+                    FROM stackoverflow.posts
+                    WHERE creation_date::date BETWEEN '2008-09-01' AND '2008-12-31'
+                    GROUP BY EXTRACT(MONTH from creation_date::date)
 )
-select *,
-       round(((post_month::numeric/LAG(post_month) OVER(ORDER BY month_date))-1)*100,2) AS post_this_month
-from this;
+
+SELECT *,
+       ROUND(((cnt::numeric / LAG(cnt) OVER (ORDER BY month)) - 1) * 100,2) AS user_growth
+FROM temp_table
 ```
 ___
 
@@ -292,15 +327,26 @@ ___
     Вывести данные его активности за октябрь 2008 года в таком виде: номер недели; дата и время последнего поста, опубликованного на этой неделе.
     
 ```SQL
-select distinct month_post,
-       max(creation_date) over(partition by month_post)
-from (select creation_date,
-       extract(week from creation_date::date) as month_post
-from stackoverflow.posts
-where user_id in (select user_id
-                  from stackoverflow.posts
-                  group by user_id
-                  order by count(id) desc
-                  limit 1) and creation_date::date between '2008-10-01' and '2008-10-31') as nnn;
+WITH profile AS (
+            SELECT user_id,
+                   COUNT(DISTINCT id) AS cnt
+            FROM stackoverflow.posts
+            GROUP BY user_id
+            ORDER BY cnt DESC
+            LIMIT 1),
+
+     p_info AS (
+            SELECT p.user_id,
+                   p.creation_date,
+                   extract('week' from p.creation_date) AS week_number
+           FROM stackoverflow.posts AS p
+           JOIN profile ON profile.user_id = p.user_id
+           WHERE DATE_TRUNC('month', p.creation_date)::date = '2008-10-01'
+           )
+
+SELECT DISTINCT week_number::numeric,
+       MAX(creation_date) OVER (PARTITION BY week_number)
+FROM p_info
+ORDER BY week_number
 ```
 ___
